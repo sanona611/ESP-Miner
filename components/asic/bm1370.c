@@ -413,7 +413,59 @@ void BM1370_set_job_difficulty_mask(int difficulty)
     _send_BM1370((TYPE_CMD | GROUP_ALL | CMD_WRITE), job_difficulty_mask, 6, BM1370_SERIALTX_DEBUG);
 }
 
+// Reuse delay is a heuristic: BM1370 results carry the hardware job ID but
+// no software generation ID, so a late result can still be misattributed.
+#define BM1370_JOB_ID_REUSE_DELAY_MS 10000
+#define BM1370_JOB_ID_COUNT 16
+
 static uint8_t id = 0;
+static TickType_t job_id_last_used_tick[128];
+static bool job_id_has_been_used[128];
+
+static uint8_t BM1370_wait_for_reusable_job_id(void)
+{
+    const TickType_t reuse_delay_ticks = pdMS_TO_TICKS(BM1370_JOB_ID_REUSE_DELAY_MS);
+
+    for (;;) {
+        TickType_t now = xTaskGetTickCount();
+        TickType_t shortest_remaining = portMAX_DELAY;
+        uint8_t candidate = id;
+
+        for (uint8_t i = 0; i < BM1370_JOB_ID_COUNT; i++) {
+            candidate = (candidate + 24) % 128;
+
+            if (!job_id_has_been_used[candidate] ||
+                (TickType_t)(now - job_id_last_used_tick[candidate]) >= reuse_delay_ticks) {
+                id = candidate;
+                job_id_last_used_tick[candidate] = now;
+                job_id_has_been_used[candidate] = true;
+                ESP_LOGI(TAG,
+                         "BM1370 job_id=%02X assigned; reuse wait=%u ms (heuristic, not a guarantee against late results)",
+                         id, (unsigned)BM1370_JOB_ID_REUSE_DELAY_MS);
+                return id;
+            }
+
+            TickType_t elapsed = (TickType_t)(now - job_id_last_used_tick[candidate]);
+            TickType_t remaining = reuse_delay_ticks - elapsed;
+            if (remaining < shortest_remaining) {
+                shortest_remaining = remaining;
+            }
+        }
+
+        TickType_t wait_ticks = shortest_remaining;
+        if (wait_ticks == 0 || wait_ticks == portMAX_DELAY) {
+            wait_ticks = 1;
+        }
+
+        uint32_t wait_ms = (uint32_t)(wait_ticks * portTICK_PERIOD_MS);
+        ESP_LOGW(TAG,
+                 "All %u BM1370 job IDs are inside the %u ms reuse wait; delaying job send by about %u ms. This timeout is heuristic, not a guarantee against late results.",
+                 (unsigned)BM1370_JOB_ID_COUNT,
+                 (unsigned)BM1370_JOB_ID_REUSE_DELAY_MS,
+                 (unsigned)wait_ms);
+        vTaskDelay(wait_ticks);
+    }
+}
 
 void BM1370_send_work(void * pvParameters, bm_job * next_bm_job)
 {
@@ -421,8 +473,7 @@ void BM1370_send_work(void * pvParameters, bm_job * next_bm_job)
     GlobalState * GLOBAL_STATE = (GlobalState *) pvParameters;
 
     BM1370_job job;
-    id = (id + 24) % 128;
-    job.job_id = id;
+    job.job_id = BM1370_wait_for_reusable_job_id();
     job.num_midstates = 0x01;
     memcpy(&job.starting_nonce, &next_bm_job->starting_nonce, 4);
     memcpy(&job.nbits, &next_bm_job->target, 4);
