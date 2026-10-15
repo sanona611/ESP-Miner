@@ -18,6 +18,8 @@ static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification
 void create_jobs_task(void *pvParameters)
 {
     GlobalState *GLOBAL_STATE = (GlobalState *)pvParameters;
+    // Keep the local ExtraNonce2 counter across pool job notifications for easier tracing.
+    uint32_t extranonce_2 = 0;
 
     while (1)
     {
@@ -36,7 +38,6 @@ void create_jobs_task(void *pvParameters)
             GLOBAL_STATE->new_stratum_version_rolling_msg = false;
         }
 
-        uint32_t extranonce_2 = 0;
         while (GLOBAL_STATE->stratum_queue.count < 1 && GLOBAL_STATE->abandon_work == 0)
         {
             if (should_generate_more_work(GLOBAL_STATE))
@@ -76,6 +77,9 @@ static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification
         ESP_LOGE(TAG, "Failed to generate extranonce_2");
         return;
     }
+
+    ESP_LOGI(TAG, "ExtraNonce2 counter=%lu value=%s pool_job=%s",
+             (unsigned long)extranonce_2, extranonce_2_str, notification->job_id);
 
     char *coinbase_tx = construct_coinbase_tx(notification->coinbase_1, notification->coinbase_2, GLOBAL_STATE->extranonce_str, extranonce_2_str);
     if (coinbase_tx == NULL) {
