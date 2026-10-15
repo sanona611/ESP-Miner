@@ -414,6 +414,9 @@ void BM1370_set_job_difficulty_mask(int difficulty)
 }
 
 static uint8_t id = 0;
+/* Monotonic software-side sequence for diagnostics; BM1370 does not return it. */
+static uint32_t next_software_generation = 0;
+static uint32_t job_generation_by_id[128] = {0};
 
 void BM1370_send_work(void * pvParameters, bm_job * next_bm_job)
 {
@@ -423,6 +426,8 @@ void BM1370_send_work(void * pvParameters, bm_job * next_bm_job)
     BM1370_job job;
     id = (id + 24) % 128;
     job.job_id = id;
+    uint32_t software_generation = ++next_software_generation;
+    job_generation_by_id[job.job_id] = software_generation;
     job.num_midstates = 0x01;
     memcpy(&job.starting_nonce, &next_bm_job->starting_nonce, 4);
     memcpy(&job.nbits, &next_bm_job->target, 4);
@@ -442,6 +447,10 @@ void BM1370_send_work(void * pvParameters, bm_job * next_bm_job)
     pthread_mutex_unlock(&GLOBAL_STATE->valid_jobs_lock);
 
     //debug sent jobs - this can get crazy if the interval is short
+    ESP_LOGI(TAG,
+             "Send BM1370 job: hw_id=%02X software_generation=%" PRIu32,
+             job.job_id, software_generation);
+
     #if BM1370_DEBUG_JOBS
     ESP_LOGI(TAG, "Send Job: %02X", job.job_id);
     #endif
@@ -514,6 +523,10 @@ task_result * BM1370_proccess_work(void * pvParameters)
     uint8_t core_id = (uint8_t)((reverse_uint32(asic_result->nonce) >> 25) & 0x7f); // BM1370 has 80 cores, so it should be coded on 7 bits
     uint8_t small_core_id = asic_result->job_id & 0x0f; // BM1370 has 16 small cores, so it should be coded on 4 bits
     uint32_t version_bits = (reverse_uint16(asic_result->version) << 13); // shift the 16 bit value left 13
+    ESP_LOGI(TAG,
+             "BM1370 result: hw_id=%02X mapped_software_generation=%" PRIu32
+             "; generation is software-only, so late results cannot be distinguished by generation",
+             job_id, job_generation_by_id[job_id]);
     ESP_LOGI(TAG, "Job ID: %02X, Core: %d/%d, Ver: %08" PRIX32, job_id, core_id, small_core_id, version_bits);
 
     GlobalState * GLOBAL_STATE = (GlobalState *) pvParameters;
