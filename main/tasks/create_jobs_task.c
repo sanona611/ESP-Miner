@@ -18,6 +18,9 @@ static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification
 void create_jobs_task(void *pvParameters)
 {
     GlobalState *GLOBAL_STATE = (GlobalState *)pvParameters;
+    // Sequential local ExtraNonce2 counter. Its value generation is independent
+    // of ASIC queue management; queue operations must not reset this counter.
+    static uint32_t extranonce_2 = 0;
 
     while (1)
     {
@@ -36,14 +39,15 @@ void create_jobs_task(void *pvParameters)
             GLOBAL_STATE->new_stratum_version_rolling_msg = false;
         }
 
-        uint32_t extranonce_2 = 0;
         while (GLOBAL_STATE->stratum_queue.count < 1 && GLOBAL_STATE->abandon_work == 0)
         {
             if (should_generate_more_work(GLOBAL_STATE))
             {
                 generate_work(GLOBAL_STATE, mining_notification, extranonce_2);
 
-                // Increase extranonce_2 for the next job.
+                // Advance deterministically; do not flush or pause the ASIC queue
+                // just because the local ExtraNonce2 value changes.
+                ESP_LOGI(TAG, "ExtraNonce2 counter=%lu", (unsigned long)extranonce_2);
                 extranonce_2++;
             }
             else
