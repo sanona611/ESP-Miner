@@ -413,6 +413,60 @@ void BM1370_set_job_difficulty_mask(int difficulty)
     _send_BM1370((TYPE_CMD | GROUP_ALL | CMD_WRITE), job_difficulty_mask, 6, BM1370_SERIALTX_DEBUG);
 }
 
+/*
+ * Make a deep copy of a job while its slot is protected by valid_jobs_lock.
+ * The result task owns the returned snapshot and releases it after validation
+ * and optional Stratum submission.
+ */
+static char *BM1370_duplicate_string(const char *source)
+{
+    if (source == NULL) {
+        return NULL;
+    }
+
+    size_t length = strlen(source) + 1;
+    char *copy = malloc(length);
+    if (copy != NULL) {
+        memcpy(copy, source, length);
+    }
+    return copy;
+}
+
+static bm_job *BM1370_clone_job(const bm_job *source)
+{
+    if (source == NULL) {
+        return NULL;
+    }
+
+    bm_job *copy = malloc(sizeof(*copy));
+    if (copy == NULL) {
+        return NULL;
+    }
+
+    memcpy(copy, source, sizeof(*copy));
+    copy->jobid = NULL;
+    copy->extranonce2 = NULL;
+
+    if (source->jobid != NULL) {
+        copy->jobid = BM1370_duplicate_string(source->jobid);
+        if (copy->jobid == NULL) {
+            free(copy);
+            return NULL;
+        }
+    }
+
+    if (source->extranonce2 != NULL) {
+        copy->extranonce2 = BM1370_duplicate_string(source->extranonce2);
+        if (copy->extranonce2 == NULL) {
+            free(copy->jobid);
+            free(copy);
+            return NULL;
+        }
+    }
+
+    return copy;
+}
+
 static uint8_t id = 0;
 
 void BM1370_send_work(void * pvParameters, bm_job * next_bm_job)
@@ -431,14 +485,19 @@ void BM1370_send_work(void * pvParameters, bm_job * next_bm_job)
     memcpy(job.prev_block_hash, next_bm_job->prev_block_hash_be, 32);
     memcpy(&job.version, &next_bm_job->version, 4);
 
+    /*
+     * active_jobs and valid_jobs share one lock: result processing must never
+     * observe a valid slot while its job metadata is being replaced/freed.
+     */
+    pthread_mutex_lock(&GLOBAL_STATE->valid_jobs_lock);
+
     if (GLOBAL_STATE->ASIC_TASK_MODULE.active_jobs[job.job_id] != NULL) {
         free_bm_job(GLOBAL_STATE->ASIC_TASK_MODULE.active_jobs[job.job_id]);
     }
 
     GLOBAL_STATE->ASIC_TASK_MODULE.active_jobs[job.job_id] = next_bm_job;
-
-    pthread_mutex_lock(&GLOBAL_STATE->valid_jobs_lock);
     GLOBAL_STATE->valid_jobs[job.job_id] = 1;
+
     pthread_mutex_unlock(&GLOBAL_STATE->valid_jobs_lock);
 
     //debug sent jobs - this can get crazy if the interval is short
@@ -518,16 +577,35 @@ task_result * BM1370_proccess_work(void * pvParameters)
 
     GlobalState * GLOBAL_STATE = (GlobalState *) pvParameters;
 
-    if (GLOBAL_STATE->valid_jobs[job_id] == 0) {
+    /*
+     * Snapshot the metadata visible when this response is decoded. This
+     * removes the use-after-free / mixed-metadata race between the driver and
+     * ASIC_result_task. It cannot distinguish a late response from an older
+     * generation after the same hardware ID has already been reused.
+     */
+    pthread_mutex_lock(&GLOBAL_STATE->valid_jobs_lock);
+
+    bm_job *active_job = GLOBAL_STATE->ASIC_TASK_MODULE.active_jobs[job_id];
+    if (GLOBAL_STATE->valid_jobs[job_id] == 0 || active_job == NULL) {
+        pthread_mutex_unlock(&GLOBAL_STATE->valid_jobs_lock);
         ESP_LOGE(TAG, "Invalid job nonce found, 0x%02X", job_id);
         return NULL;
     }
 
-    uint32_t rolled_version = GLOBAL_STATE->ASIC_TASK_MODULE.active_jobs[job_id]->version | version_bits;
+    bm_job *job_snapshot = BM1370_clone_job(active_job);
+    pthread_mutex_unlock(&GLOBAL_STATE->valid_jobs_lock);
+
+    if (job_snapshot == NULL) {
+        ESP_LOGE(TAG, "Unable to snapshot BM1370 job 0x%02X", job_id);
+        return NULL;
+    }
+
+    uint32_t rolled_version = job_snapshot->version | version_bits;
 
     result.job_id = job_id;
     result.nonce = asic_result->nonce;
     result.rolled_version = rolled_version;
+    result.job_snapshot = job_snapshot;
 
     return &result;
 }
