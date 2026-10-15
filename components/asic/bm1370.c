@@ -418,6 +418,8 @@ static uint8_t id = 0;
 // result generation because BM1370 responses contain only the hardware job ID.
 static uint32_t bm1370_job_send_sequence = 0;
 static uint32_t bm1370_result_sequence = 0;
+static TickType_t bm1370_job_last_sent_tick[128];
+static bool bm1370_job_has_send_tick[128];
 
 void BM1370_send_work(void * pvParameters, bm_job * next_bm_job)
 {
@@ -445,14 +447,16 @@ void BM1370_send_work(void * pvParameters, bm_job * next_bm_job)
     GLOBAL_STATE->valid_jobs[job.job_id] = 1;
     pthread_mutex_unlock(&GLOBAL_STATE->valid_jobs_lock);
 
-    // The protocol response does not echo a software generation/sequence and
-    // has no explicit per-job drain/completion acknowledgement. These logs are
-    // diagnostic only; they cannot prove that an older job has fully drained.
+    // Record send time for diagnostics. BM1370 responses do not echo a
+    // software generation/sequence and provide no explicit per-job drain ACK.
+    TickType_t sent_tick = xTaskGetTickCount();
+    bm1370_job_last_sent_tick[job.job_id] = sent_tick;
+    bm1370_job_has_send_tick[job.job_id] = true;
     #if BM1370_DEBUG_JOBS
     bm1370_job_send_sequence++;
-    ESP_LOGI(TAG, "JOB_SEND seq=%lu id=%02X tick=%lu; no drain acknowledgement in response protocol",
+    ESP_LOGI(TAG, "JOB_SEND seq=%lu id=%02X tick=%lu; no drain ACK; elapsed timing is diagnostic only",
              (unsigned long)bm1370_job_send_sequence, job.job_id,
-             (unsigned long)xTaskGetTickCount());
+             (unsigned long)sent_tick);
     #endif
 
     _send_BM1370((TYPE_JOB | GROUP_SINGLE | CMD_WRITE), (uint8_t *)&job, sizeof(BM1370_job), BM1370_DEBUG_WORK);
@@ -520,11 +524,19 @@ task_result * BM1370_proccess_work(void * pvParameters)
     // ESP_LOGI(TAG, "Job ID: %02X, Core: %01X", job_id, asic_result->job_id & 0x07);
 
     uint8_t job_id = (asic_result->job_id & 0xf0) >> 1;
+    TickType_t result_tick = xTaskGetTickCount();
+    if (bm1370_job_has_send_tick[job_id]) {
+        TickType_t elapsed_ticks = (TickType_t)(result_tick - bm1370_job_last_sent_tick[job_id]);
+        ESP_LOGI(TAG, "RESULT_TIMING id=%02X ticks_since_latest_send=%lu; may be ambiguous after ID reuse; not a drain guarantee",
+                 job_id, (unsigned long)elapsed_ticks);
+    } else {
+        ESP_LOGW(TAG, "RESULT_TIMING id=%02X has no recorded send timestamp", job_id);
+    }
     #if BM1370_DEBUG_JOBS
     bm1370_result_sequence++;
     ESP_LOGI(TAG, "RESULT_RX seq=%lu id=%02X tick=%lu; response has no software generation",
              (unsigned long)bm1370_result_sequence, job_id,
-             (unsigned long)xTaskGetTickCount());
+             (unsigned long)result_tick);
     #endif
     uint8_t core_id = (uint8_t)((reverse_uint32(asic_result->nonce) >> 25) & 0x7f); // BM1370 has 80 cores, so it should be coded on 7 bits
     uint8_t small_core_id = asic_result->job_id & 0x0f; // BM1370 has 16 small cores, so it should be coded on 4 bits
