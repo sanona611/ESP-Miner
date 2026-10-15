@@ -414,6 +414,10 @@ void BM1370_set_job_difficulty_mask(int difficulty)
 }
 
 static uint8_t id = 0;
+// Deterministic diagnostic sequence numbers; they do not identify a hardware
+// result generation because BM1370 responses contain only the hardware job ID.
+static uint32_t bm1370_job_send_sequence = 0;
+static uint32_t bm1370_result_sequence = 0;
 
 void BM1370_send_work(void * pvParameters, bm_job * next_bm_job)
 {
@@ -441,9 +445,14 @@ void BM1370_send_work(void * pvParameters, bm_job * next_bm_job)
     GLOBAL_STATE->valid_jobs[job.job_id] = 1;
     pthread_mutex_unlock(&GLOBAL_STATE->valid_jobs_lock);
 
-    //debug sent jobs - this can get crazy if the interval is short
+    // The protocol response does not echo a software generation/sequence and
+    // has no explicit per-job drain/completion acknowledgement. These logs are
+    // diagnostic only; they cannot prove that an older job has fully drained.
     #if BM1370_DEBUG_JOBS
-    ESP_LOGI(TAG, "Send Job: %02X", job.job_id);
+    bm1370_job_send_sequence++;
+    ESP_LOGI(TAG, "JOB_SEND seq=%lu id=%02X tick=%lu; no drain acknowledgement in response protocol",
+             (unsigned long)bm1370_job_send_sequence, job.job_id,
+             (unsigned long)xTaskGetTickCount());
     #endif
 
     _send_BM1370((TYPE_JOB | GROUP_SINGLE | CMD_WRITE), (uint8_t *)&job, sizeof(BM1370_job), BM1370_DEBUG_WORK);
@@ -511,6 +520,12 @@ task_result * BM1370_proccess_work(void * pvParameters)
     // ESP_LOGI(TAG, "Job ID: %02X, Core: %01X", job_id, asic_result->job_id & 0x07);
 
     uint8_t job_id = (asic_result->job_id & 0xf0) >> 1;
+    #if BM1370_DEBUG_JOBS
+    bm1370_result_sequence++;
+    ESP_LOGI(TAG, "RESULT_RX seq=%lu id=%02X tick=%lu; response has no software generation",
+             (unsigned long)bm1370_result_sequence, job_id,
+             (unsigned long)xTaskGetTickCount());
+    #endif
     uint8_t core_id = (uint8_t)((reverse_uint32(asic_result->nonce) >> 25) & 0x7f); // BM1370 has 80 cores, so it should be coded on 7 bits
     uint8_t small_core_id = asic_result->job_id & 0x0f; // BM1370 has 16 small cores, so it should be coded on 4 bits
     uint32_t version_bits = (reverse_uint16(asic_result->version) << 13); // shift the 16 bit value left 13
