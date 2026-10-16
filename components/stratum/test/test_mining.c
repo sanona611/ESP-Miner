@@ -8,10 +8,9 @@ TEST_CASE("Check coinbase tx construction", "[mining]")
 {
     const char *coinbase_1 = "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff20020862062f503253482f04b8864e5008";
     const char *coinbase_2 = "072f736c7573682f000000000100f2052a010000001976a914d23fcdf86f7e756a64a7a9688ef9903327048ed988ac00000000";
-    const char *extranonce = "e9695791";
-    const char *extranonce_2 = "99999999";
-    char *coinbase_tx = construct_coinbase_tx(coinbase_1, coinbase_2, extranonce, extranonce_2);
-    TEST_ASSERT_EQUAL_STRING(coinbase_tx, "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff20020862062f503253482f04b8864e5008e969579199999999072f736c7573682f000000000100f2052a010000001976a914d23fcdf86f7e756a64a7a9688ef9903327048ed988ac00000000");
+    const char *extranonce = "e96957919999999900000000";
+    char *coinbase_tx = construct_coinbase_tx(coinbase_1, coinbase_2, extranonce);
+    TEST_ASSERT_EQUAL_STRING(coinbase_tx, "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff20020862062f503253482f04b8864e5008e96957919999999900000000072f736c7573682f000000000100f2052a010000001976a914d23fcdf86f7e756a64a7a9688ef9903327048ed988ac00000000");
     free(coinbase_tx);
 }
 
@@ -115,27 +114,19 @@ TEST_CASE("Validate version mask incrementing", "[mining]")
 //     TEST_ASSERT_EQUAL_UINT8(0x6a, job.merkle_root[31]);
 // }
 
-TEST_CASE("Test extranonce 2 generation", "[mining extranonce2]")
+TEST_CASE("Test single 12-byte ExtraNonce generation", "[mining extranonce]")
 {
-    char *first = extranonce_2_generate(0, 4);
-    TEST_ASSERT_EQUAL_STRING("00000000", first);
+    const char *base = "aabbccdd0000000000000000";
+    char *first = extranonce_generate(base, 0);
+    TEST_ASSERT_EQUAL_STRING("aabbccdd0000000000000000", first);
     free(first);
-
-    char *second = extranonce_2_generate(1, 4);
-    TEST_ASSERT_EQUAL_STRING("01000000", second);
+    char *second = extranonce_generate(base, 1);
+    TEST_ASSERT_EQUAL_STRING("aabbccdd0100000000000000", second);
     free(second);
-
-    char *third = extranonce_2_generate(2, 4);
-    TEST_ASSERT_EQUAL_STRING("02000000", third);
-    free(third);
-
-    char *fourth = extranonce_2_generate(UINT_MAX - 1, 4);
-    TEST_ASSERT_EQUAL_STRING("feffffff", fourth);
-    free(fourth);
-
-    char *fifth = extranonce_2_generate(UINT_MAX / 2, 6);
-    TEST_ASSERT_EQUAL_STRING("ffffff7f0000", fifth);
-    free(fifth);
+    char *wide = extranonce_generate(base, UINT64_C(0x0102030405060708));
+    TEST_ASSERT_EQUAL_STRING("aabbccdd0807060504030201", wide);
+    free(wide);
+    TEST_ASSERT_NULL(extranonce_generate("aabbccdd", 0));
 }
 
 TEST_CASE("Test nonce diff checking", "[mining test_nonce]")

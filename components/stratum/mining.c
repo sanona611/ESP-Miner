@@ -8,22 +8,20 @@
 void free_bm_job(bm_job *job)
 {
     free(job->jobid);
-    free(job->extranonce2);
+    free(job->extranonce);
     free(job);
 }
 
 char *construct_coinbase_tx(const char *coinbase_1, const char *coinbase_2,
-                            const char *extranonce, const char *extranonce_2)
+                            const char *extranonce)
 {
-    int coinbase_tx_len = strlen(coinbase_1) + strlen(coinbase_2) + strlen(extranonce) + strlen(extranonce_2) + 1;
-
+    if (coinbase_1 == NULL || coinbase_2 == NULL || extranonce == NULL) return NULL;
+    size_t coinbase_tx_len = strlen(coinbase_1) + strlen(coinbase_2) + strlen(extranonce) + 1;
     char *coinbase_tx = malloc(coinbase_tx_len);
+    if (coinbase_tx == NULL) return NULL;
     strcpy(coinbase_tx, coinbase_1);
     strcat(coinbase_tx, extranonce);
-    strcat(coinbase_tx, extranonce_2);
     strcat(coinbase_tx, coinbase_2);
-    coinbase_tx[coinbase_tx_len - 1] = '\0';
-
     return coinbase_tx;
 }
 
@@ -110,17 +108,21 @@ bm_job construct_bm_job(mining_notify *params, const char *merkle_root, const ui
     return new_job;
 }
 
-char *extranonce_2_generate(uint32_t extranonce_2, uint32_t length)
+char *extranonce_generate(const char *base_extranonce, uint64_t counter)
 {
-    char *extranonce_2_str = malloc(length * 2 + 1);
-    memset(extranonce_2_str, '0', length * 2);
-    extranonce_2_str[length * 2] = '\0';
-    bin2hex((uint8_t *)&extranonce_2, sizeof(extranonce_2), extranonce_2_str, length * 2 + 1);
-    if (length > 4)
-    {
-        extranonce_2_str[8] = '0';
+    static const char hex[] = "0123456789abcdef";
+    if (base_extranonce == NULL || strlen(base_extranonce) != 24) return NULL;
+    char *extranonce = malloc(25);
+    if (extranonce == NULL) return NULL;
+    // Preserve the pool-issued 4-byte prefix; encode the 64-bit counter in the remaining 8 bytes.
+    memcpy(extranonce, base_extranonce, 8);
+    for (size_t i = 0; i < 8; i++) {
+        uint8_t byte = (uint8_t)(counter >> (i * 8));
+        extranonce[8 + i * 2] = hex[byte >> 4];
+        extranonce[9 + i * 2] = hex[byte & 0x0f];
     }
-    return extranonce_2_str;
+    extranonce[24] = '\0';
+    return extranonce;
 }
 
 ///////cgminer nonce testing

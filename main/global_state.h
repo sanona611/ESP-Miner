@@ -110,8 +110,7 @@ typedef struct
     PowerManagementModule POWER_MANAGEMENT_MODULE;
     SelfTestModule SELF_TEST_MODULE;
 
-    char * extranonce_str;
-    int extranonce_2_len;
+    char * extranonce;
     int abandon_work;
 
     uint8_t * valid_jobs;

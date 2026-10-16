@@ -291,8 +291,14 @@ void stratum_task(void * pvParameters)
                 GLOBAL_STATE->version_mask = stratum_api_v1_message.version_mask;
                 GLOBAL_STATE->new_stratum_version_rolling_msg = true;
             } else if (stratum_api_v1_message.method == STRATUM_RESULT_SUBSCRIBE) {
-                GLOBAL_STATE->extranonce_str = stratum_api_v1_message.extranonce_str;
-                GLOBAL_STATE->extranonce_2_len = stratum_api_v1_message.extranonce_2_len;
+                if (!stratum_api_v1_message.response_success || stratum_api_v1_message.extranonce == NULL) {
+                    ESP_LOGE(TAG, "Pool ExtraNonce contract mismatch; expected one 12-byte field and extranonce2_size=0");
+                    stratum_close_connection(GLOBAL_STATE);
+                    break;
+                }
+                free(GLOBAL_STATE->extranonce);
+                GLOBAL_STATE->extranonce = stratum_api_v1_message.extranonce;
+                stratum_api_v1_message.extranonce = NULL;
             } else if (stratum_api_v1_message.method == CLIENT_RECONNECT) {
                 ESP_LOGE(TAG, "Pool requested client reconnect...");
                 stratum_close_connection(GLOBAL_STATE);

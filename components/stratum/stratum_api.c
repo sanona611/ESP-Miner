@@ -24,7 +24,7 @@ static size_t json_rpc_buffer_size = 0;
 static int send_uid = 1;
 
 static void debug_stratum_tx(const char *);
-int _parse_stratum_subscribe_result_message(const char * result_json_str, char ** extranonce, int * extranonce2_len);
+int _parse_stratum_subscribe_result_message(const char * result_json_str, char ** extranonce);
 
 void STRATUM_V1_reset_uid()
 {
@@ -190,27 +190,28 @@ void STRATUM_V1_parse(StratumApiV1Message * message, const char * stratum_json)
         } else if (parsed_id == STRATUM_ID_SUBSCRIBE) {
             result = STRATUM_RESULT_SUBSCRIBE;
 
-            cJSON * extranonce2_len_json = cJSON_GetArrayItem(result_json, 2);
-            if (extranonce2_len_json == NULL) {
-                ESP_LOGE(TAG, "Unable to parse extranonce2_len: %s", result_json->valuestring);
+            cJSON * extranonce_size_json = cJSON_GetArrayItem(result_json, 2);
+            if (extranonce_size_json == NULL || !cJSON_IsNumber(extranonce_size_json) ||
+                extranonce_size_json->valueint != 0) {
+                ESP_LOGE(TAG, "Pool must use the single 12-byte ExtraNonce contract (extranonce2_size=0)");
                 message->response_success = false;
                 goto done;
             }
-            message->extranonce_2_len = extranonce2_len_json->valueint;
-
             cJSON * extranonce_json = cJSON_GetArrayItem(result_json, 1);
-            if (extranonce_json == NULL) {
-                ESP_LOGE(TAG, "Unable parse extranonce: %s", result_json->valuestring);
+            if (extranonce_json == NULL || !cJSON_IsString(extranonce_json) ||
+                strlen(extranonce_json->valuestring) != 24) {
+                ESP_LOGE(TAG, "Pool must provide exactly 12 bytes of ExtraNonce");
                 message->response_success = false;
                 goto done;
             }
-            message->extranonce_str = malloc(strlen(extranonce_json->valuestring) + 1);
-            strcpy(message->extranonce_str, extranonce_json->valuestring);
+            message->extranonce = strdup(extranonce_json->valuestring);
+            if (message->extranonce == NULL) {
+                ESP_LOGE(TAG, "Unable to allocate ExtraNonce");
+                message->response_success = false;
+                goto done;
+            }
             message->response_success = true;
-
-            //print the extranonce_str
-            ESP_LOGI(TAG, "extranonce_str: %s", message->extranonce_str);
-            ESP_LOGI(TAG, "extranonce_2_len: %d", message->extranonce_2_len);
+            ESP_LOGI(TAG, "single ExtraNonce (12 bytes): %s", message->extranonce);
 
         //if the id is STRATUM_ID_CONFIGURE parse it
         } else if (parsed_id == STRATUM_ID_CONFIGURE) {
@@ -286,37 +287,22 @@ void STRATUM_V1_free_mining_notify(mining_notify * params)
     free(params);
 }
 
-int _parse_stratum_subscribe_result_message(const char * result_json_str, char ** extranonce, int * extranonce2_len)
+int _parse_stratum_subscribe_result_message(const char *result_json_str, char **extranonce)
 {
-    cJSON * root = cJSON_Parse(result_json_str);
-    if (root == NULL) {
-        ESP_LOGE(TAG, "Unable to parse %s", result_json_str);
+    cJSON *root = cJSON_Parse(result_json_str);
+    if (root == NULL) return -1;
+    cJSON *result = cJSON_GetObjectItem(root, "result");
+    if (result == NULL) { cJSON_Delete(root); return -1; }
+    cJSON *size = cJSON_GetArrayItem(result, 2);
+    cJSON *value = cJSON_GetArrayItem(result, 1);
+    if (size == NULL || !cJSON_IsNumber(size) || size->valueint != 0 ||
+        value == NULL || !cJSON_IsString(value) || strlen(value->valuestring) != 24) {
+        cJSON_Delete(root);
         return -1;
     }
-    cJSON * result = cJSON_GetObjectItem(root, "result");
-    if (result == NULL) {
-        ESP_LOGE(TAG, "Unable to parse subscribe result %s", result_json_str);
-        return -1;
-    }
-
-    cJSON * extranonce2_len_json = cJSON_GetArrayItem(result, 2);
-    if (extranonce2_len_json == NULL) {
-        ESP_LOGE(TAG, "Unable to parse extranonce2_len: %s", result->valuestring);
-        return -1;
-    }
-    *extranonce2_len = extranonce2_len_json->valueint;
-
-    cJSON * extranonce_json = cJSON_GetArrayItem(result, 1);
-    if (extranonce_json == NULL) {
-        ESP_LOGE(TAG, "Unable parse extranonce: %s", result->valuestring);
-        return -1;
-    }
-    *extranonce = malloc(strlen(extranonce_json->valuestring) + 1);
-    strcpy(*extranonce, extranonce_json->valuestring);
-
+    *extranonce = strdup(value->valuestring);
     cJSON_Delete(root);
-
-    return 0;
+    return *extranonce == NULL ? -1 : 0;
 }
 
 int STRATUM_V1_subscribe(int socket, char * model)
@@ -354,15 +340,15 @@ int STRATUM_V1_authenticate(int socket, const char * username, const char * pass
 /// @param username The client’s user name.
 /// @param jobid The job ID for the work being submitted.
 /// @param ntime The hex-encoded time value use in the block header.
-/// @param extranonce_2 The hex-encoded value of extra nonce 2.
+/// @param extranonce The complete 12-byte hex-encoded ExtraNonce value.
 /// @param nonce The hex-encoded nonce value to use in the block header.
-int STRATUM_V1_submit_share(int socket, const char * username, const char * jobid, const char * extranonce_2, const uint32_t ntime,
+int STRATUM_V1_submit_share(int socket, const char * username, const char * jobid, const char * extranonce, const uint32_t ntime,
                              const uint32_t nonce, const uint32_t version)
 {
     char submit_msg[BUFFER_SIZE];
     sprintf(submit_msg,
             "{\"id\": %d, \"method\": \"mining.submit\", \"params\": [\"%s\", \"%s\", \"%s\", \"%08lx\", \"%08lx\", \"%08lx\"]}\n",
-            send_uid++, username, jobid, extranonce_2, ntime, nonce, version);
+            send_uid++, username, jobid, extranonce, ntime, nonce, version);
     debug_stratum_tx(submit_msg);
 
     return write(socket, submit_msg, strlen(submit_msg));

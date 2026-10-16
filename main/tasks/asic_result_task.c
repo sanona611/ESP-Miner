@@ -78,7 +78,7 @@ void ASIC_result_task(void *pvParameters)
                 GLOBAL_STATE->sock,
                 user,
                 job->jobid,
-                job->extranonce2,
+                job->extranonce,
                 job->ntime,
                 asic_result->nonce,
                 asic_result->rolled_version ^ job->version);

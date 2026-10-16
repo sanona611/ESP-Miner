@@ -22,13 +22,13 @@ typedef struct
     uint8_t midstate3[32];
     uint32_t pool_diff;
     char *jobid;
-    char *extranonce2;
+    char *extranonce;
 } bm_job;
 
 void free_bm_job(bm_job *job);
 
 char *construct_coinbase_tx(const char *coinbase_1, const char *coinbase_2,
-                            const char *extranonce, const char *extranonce_2);
+                            const char *extranonce);
 
 char *calculate_merkle_root_hash(const char *coinbase_tx, const uint8_t merkle_branches[][32], const int num_merkle_branches);
 
@@ -36,7 +36,7 @@ bm_job construct_bm_job(mining_notify *params, const char *merkle_root, const ui
 
 double test_nonce_value(const bm_job *job, const uint32_t nonce, const uint32_t rolled_version);
 
-char *extranonce_2_generate(uint32_t extranonce_2, uint32_t length);
+char *extranonce_generate(const char *base_extranonce, uint64_t counter);
 
 uint32_t increment_bitmask(const uint32_t value, const uint32_t mask);
 

@@ -445,7 +445,7 @@ static bm_job *BM1370_clone_job(const bm_job *source)
 
     memcpy(copy, source, sizeof(*copy));
     copy->jobid = NULL;
-    copy->extranonce2 = NULL;
+    copy->extranonce = NULL;
 
     if (source->jobid != NULL) {
         copy->jobid = BM1370_duplicate_string(source->jobid);
@@ -455,9 +455,9 @@ static bm_job *BM1370_clone_job(const bm_job *source)
         }
     }
 
-    if (source->extranonce2 != NULL) {
-        copy->extranonce2 = BM1370_duplicate_string(source->extranonce2);
-        if (copy->extranonce2 == NULL) {
+    if (source->extranonce != NULL) {
+        copy->extranonce = BM1370_duplicate_string(source->extranonce);
+        if (copy->extranonce == NULL) {
             free(copy->jobid);
             free(copy);
             return NULL;

@@ -43,8 +43,7 @@ typedef struct
 
 typedef struct
 {
-    char * extranonce_str;
-    int extranonce_2_len;
+    char * extranonce;
 
     int64_t message_id;
     // Indicates the type of request the message represents.
@@ -81,7 +80,7 @@ int STRATUM_V1_configure_version_rolling(int socket, uint32_t * version_mask);
 int STRATUM_V1_suggest_difficulty(int socket, uint32_t difficulty);
 
 int STRATUM_V1_submit_share(int socket, const char *username, const char *jobid,
-                            const char *extranonce_2, const uint32_t ntime, const uint32_t nonce,
+                            const char *extranonce, const uint32_t ntime, const uint32_t nonce,
                             const uint32_t version);
 
 #endif // STRATUM_API_H
