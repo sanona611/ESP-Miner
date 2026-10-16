@@ -21,8 +21,7 @@
 #include "self_test.h"
 
 static GlobalState GLOBAL_STATE = {
-    .extranonce_str = NULL, 
-    .extranonce_2_len = 0, 
+    .extranonce = NULL,
     .abandon_work = 0, 
     .version_mask = 0,
     .ASIC_initalized = false
