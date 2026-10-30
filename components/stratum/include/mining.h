@@ -36,7 +36,10 @@ bm_job construct_bm_job(mining_notify *params, const char *merkle_root, const ui
 
 double test_nonce_value(const bm_job *job, const uint32_t nonce, const uint32_t rolled_version);
 
-char *extranonce_2_generate(uint32_t extranonce_2, uint32_t length);
+#define EXTRANONCE2_MAX_SIZE_BYTES 11
+
+char *extranonce_2_generate(const uint8_t *extranonce_2, uint32_t length);
+void extranonce_2_increment(uint8_t *extranonce_2, uint32_t length);
 
 uint32_t increment_bitmask(const uint32_t value, const uint32_t mask);
 
