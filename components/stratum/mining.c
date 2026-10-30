@@ -110,24 +110,32 @@ bm_job construct_bm_job(mining_notify *params, const char *merkle_root, const ui
     return new_job;
 }
 
-char *extranonce_2_generate(uint32_t extranonce_2, uint32_t length)
+char *extranonce_2_generate(const uint8_t *extranonce_2, uint32_t length)
 {
+    if (extranonce_2 == NULL || length > EXTRANONCE2_MAX_SIZE_BYTES)
+        return NULL;
+
     char *extranonce_2_str = malloc(length * 2 + 1);
     if (extranonce_2_str == NULL)
         return NULL;
 
-    memset(extranonce_2_str, '0', length * 2);
-    extranonce_2_str[length * 2] = '\0';
-
-    size_t counter_bytes = length < sizeof(extranonce_2) ? length : sizeof(extranonce_2);
-    bin2hex((uint8_t *)&extranonce_2, counter_bytes, extranonce_2_str, length * 2 + 1);
-
-    // bin2hex() writes a NUL after the converted bytes. Restore the zero-padding
-    // so the returned C string always contains the full negotiated extranonce2.
-    memset(extranonce_2_str + counter_bytes * 2, '0', (length - counter_bytes) * 2);
-    extranonce_2_str[length * 2] = '\0';
-
+    bin2hex(extranonce_2, length, extranonce_2_str, length * 2 + 1);
     return extranonce_2_str;
+}
+
+void extranonce_2_increment(uint8_t *extranonce_2, uint32_t length)
+{
+    if (extranonce_2 == NULL || length > EXTRANONCE2_MAX_SIZE_BYTES)
+        return;
+
+    // Preserve the existing little-endian byte representation and propagate
+    // carry through every negotiated byte.
+    for (uint32_t i = 0; i < length; i++)
+    {
+        extranonce_2[i]++;
+        if (extranonce_2[i] != 0)
+            break;
+    }
 }
 
 ///////cgminer nonce testing
