@@ -115,11 +115,8 @@ char *extranonce_2_generate(uint32_t extranonce_2, uint32_t length)
     char *extranonce_2_str = malloc(length * 2 + 1);
     memset(extranonce_2_str, '0', length * 2);
     extranonce_2_str[length * 2] = '\0';
-    bin2hex((uint8_t *)&extranonce_2, sizeof(extranonce_2), extranonce_2_str, length * 2 + 1);
-    if (length > 4)
-    {
-        extranonce_2_str[8] = '0';
-    }
+    size_t counter_bytes = length < sizeof(extranonce_2) ? length : sizeof(extranonce_2);
+    bin2hex((uint8_t *)&extranonce_2, counter_bytes, extranonce_2_str, length * 2 + 1);
     return extranonce_2_str;
 }
 
