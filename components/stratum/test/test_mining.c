@@ -188,3 +188,13 @@ TEST_CASE("Test nonce diff checking 2", "[mining test_nonce]")
     double diff = test_nonce_value(&job, nonce, 0);
     TEST_ASSERT_EQUAL_INT(683, (int)diff);
 }
+
+
+TEST_CASE("Generate 11-byte extranonce2", "[mining]")
+{
+    char *extranonce_2 = extranonce_2_generate(0x01020304, 11);
+    TEST_ASSERT_NOT_NULL(extranonce_2);
+    TEST_ASSERT_EQUAL_UINT32(22, strlen(extranonce_2));
+    TEST_ASSERT_EQUAL_STRING("0403020100000000000000", extranonce_2);
+    free(extranonce_2);
+}
