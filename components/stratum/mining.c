@@ -4,6 +4,7 @@
 #include "mining.h"
 #include "utils.h"
 #include "mbedtls/sha256.h"
+#include "esp_random.h"
 
 void free_bm_job(bm_job *job)
 {
@@ -113,8 +114,25 @@ bm_job construct_bm_job(mining_notify *params, const char *merkle_root, const ui
 char *extranonce_2_generate(uint32_t extranonce_2, uint32_t length)
 {
     char *extranonce_2_str = malloc(length * 2 + 1);
+    if (extranonce_2_str == NULL)
+        return NULL;
+
     memset(extranonce_2_str, '0', length * 2);
     extranonce_2_str[length * 2] = '\0';
+
+    if (length == 11)
+    {
+        // Keep one random 3-byte prefix for each 256-value counter cycle.
+        static uint8_t random_prefix[3];
+        if ((extranonce_2 & 0xff) == 0)
+            esp_fill_random(random_prefix, sizeof(random_prefix));
+
+        // Layout: 3 random bytes + 6 zero bytes + 2-byte counter (00xx).
+        bin2hex(random_prefix, sizeof(random_prefix), extranonce_2_str, length * 2 + 1);
+        snprintf(extranonce_2_str + 18, 5, "%04x", extranonce_2 & 0xff);
+        return extranonce_2_str;
+    }
+
     size_t counter_bytes = length < sizeof(extranonce_2) ? length : sizeof(extranonce_2);
     bin2hex((uint8_t *)&extranonce_2, counter_bytes, extranonce_2_str, length * 2 + 1);
     return extranonce_2_str;
