@@ -113,10 +113,20 @@ bm_job construct_bm_job(mining_notify *params, const char *merkle_root, const ui
 char *extranonce_2_generate(uint32_t extranonce_2, uint32_t length)
 {
     char *extranonce_2_str = malloc(length * 2 + 1);
+    if (extranonce_2_str == NULL)
+        return NULL;
+
     memset(extranonce_2_str, '0', length * 2);
     extranonce_2_str[length * 2] = '\0';
+
     size_t counter_bytes = length < sizeof(extranonce_2) ? length : sizeof(extranonce_2);
     bin2hex((uint8_t *)&extranonce_2, counter_bytes, extranonce_2_str, length * 2 + 1);
+
+    // bin2hex() writes a NUL after the converted bytes. Restore the zero-padding
+    // so the returned C string always contains the full negotiated extranonce2.
+    memset(extranonce_2_str + counter_bytes * 2, '0', (length - counter_bytes) * 2);
+    extranonce_2_str[length * 2] = '\0';
+
     return extranonce_2_str;
 }
 
