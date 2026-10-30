@@ -191,11 +191,28 @@ TEST_CASE("Test nonce diff checking 2", "[mining test_nonce]")
 }
 
 
-TEST_CASE("Generate 11-byte extranonce2", "[mining]")
+TEST_CASE("Generate 11-byte extranonce2 with random prefix and 8-bit counter", "[mining]")
 {
-    char *extranonce_2 = extranonce_2_generate(0x01020304, 11);
-    TEST_ASSERT_NOT_NULL(extranonce_2);
-    TEST_ASSERT_EQUAL_UINT32(22, strlen(extranonce_2));
-    TEST_ASSERT_EQUAL_STRING("0403020100000000000000", extranonce_2);
-    free(extranonce_2);
+    char *first = extranonce_2_generate(0, 11);
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_EQUAL_UINT32(22, strlen(first));
+    TEST_ASSERT_EQUAL_UINT32(0, strspn(first, "0123456789abcdefABCDEF"));
+    TEST_ASSERT_EQUAL_STRING("0000000000000000000000" + 0, first + 6);
+    free(first);
+
+    char *second = extranonce_2_generate(1, 11);
+    TEST_ASSERT_NOT_NULL(second);
+    TEST_ASSERT_EQUAL_UINT32(22, strlen(second));
+    TEST_ASSERT_EQUAL_STRING("0000000000000000000001" + 0, second + 6);
+    free(second);
+
+    char *last = extranonce_2_generate(255, 11);
+    TEST_ASSERT_NOT_NULL(last);
+    TEST_ASSERT_EQUAL_STRING("00000000000000000000ff" + 0, last + 6);
+    free(last);
+
+    char *next_cycle = extranonce_2_generate(256, 11);
+    TEST_ASSERT_NOT_NULL(next_cycle);
+    TEST_ASSERT_EQUAL_STRING("0000000000000000000000" + 0, next_cycle + 6);
+    free(next_cycle);
 }
