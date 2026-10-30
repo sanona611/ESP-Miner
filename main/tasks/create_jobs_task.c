@@ -13,11 +13,14 @@ static const char *TAG = "create_jobs_task";
 #define QUEUE_LOW_WATER_MARK 10 // Adjust based on your requirements
 
 static bool should_generate_more_work(GlobalState *GLOBAL_STATE);
-static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification, uint32_t extranonce_2);
+static bool generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification, const uint8_t *extranonce_2);
 
 void create_jobs_task(void *pvParameters)
 {
     GlobalState *GLOBAL_STATE = (GlobalState *)pvParameters;
+
+    // Persistent for this Stratum session; do not reset on each mining.notify.
+    uint8_t extranonce_2[EXTRANONCE2_MAX_SIZE_BYTES] = {0};
 
     while (1)
     {
@@ -36,15 +39,15 @@ void create_jobs_task(void *pvParameters)
             GLOBAL_STATE->new_stratum_version_rolling_msg = false;
         }
 
-        uint32_t extranonce_2 = 0;
         while (GLOBAL_STATE->stratum_queue.count < 1 && GLOBAL_STATE->abandon_work == 0)
         {
             if (should_generate_more_work(GLOBAL_STATE))
             {
-                generate_work(GLOBAL_STATE, mining_notification, extranonce_2);
-
-                // Increase extranonce_2 for the next job.
-                extranonce_2++;
+                if (generate_work(GLOBAL_STATE, mining_notification, extranonce_2))
+                {
+                    // Each ASIC job owns this fixed extranonce2 for all its shares.
+                    extranonce_2_increment(extranonce_2, GLOBAL_STATE->extranonce_2_len);
+                }
             }
             else
             {
@@ -69,19 +72,19 @@ static bool should_generate_more_work(GlobalState *GLOBAL_STATE)
     return GLOBAL_STATE->ASIC_jobs_queue.count < QUEUE_LOW_WATER_MARK;
 }
 
-static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification, uint32_t extranonce_2)
+static bool generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification, const uint8_t *extranonce_2)
 {
     char *extranonce_2_str = extranonce_2_generate(extranonce_2, GLOBAL_STATE->extranonce_2_len);
     if (extranonce_2_str == NULL) {
         ESP_LOGE(TAG, "Failed to generate extranonce_2");
-        return;
+        return false;
     }
 
     char *coinbase_tx = construct_coinbase_tx(notification->coinbase_1, notification->coinbase_2, GLOBAL_STATE->extranonce_str, extranonce_2_str);
     if (coinbase_tx == NULL) {
         ESP_LOGE(TAG, "Failed to construct coinbase_tx");
         free(extranonce_2_str);
-        return;
+        return false;
     }
 
     char *merkle_root = calculate_merkle_root_hash(coinbase_tx, (uint8_t(*)[32])notification->merkle_branches, notification->n_merkle_branches);
@@ -89,7 +92,7 @@ static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification
         ESP_LOGE(TAG, "Failed to calculate merkle_root");
         free(extranonce_2_str);
         free(coinbase_tx);
-        return;
+        return false;
     }
 
     bm_job next_job = construct_bm_job(notification, merkle_root, GLOBAL_STATE->version_mask);
@@ -100,7 +103,7 @@ static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification
         free(extranonce_2_str);
         free(coinbase_tx);
         free(merkle_root);
-        return;
+        return false;
     }
 
     memcpy(queued_next_job, &next_job, sizeof(bm_job));
@@ -112,4 +115,5 @@ static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification
 
     free(coinbase_tx);
     free(merkle_root);
+    return true;
 }
