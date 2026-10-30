@@ -116,27 +116,33 @@ TEST_CASE("Validate version mask incrementing", "[mining]")
 //     TEST_ASSERT_EQUAL_UINT8(0x6a, job.merkle_root[31]);
 // }
 
-TEST_CASE("Test extranonce 2 generation", "[mining extranonce2]")
+TEST_CASE("Test full-width extranonce2 generation and increment", "[mining extranonce2]")
 {
-    char *first = extranonce_2_generate(0, 4);
-    TEST_ASSERT_EQUAL_STRING("00000000", first);
-    free(first);
+    uint8_t counter[EXTRANONCE2_MAX_SIZE_BYTES] = {0};
 
-    char *second = extranonce_2_generate(1, 4);
-    TEST_ASSERT_EQUAL_STRING("01000000", second);
-    free(second);
+    char *value = extranonce_2_generate(counter, sizeof(counter));
+    TEST_ASSERT_NOT_NULL(value);
+    TEST_ASSERT_EQUAL_UINT32(22, strlen(value));
+    TEST_ASSERT_EQUAL_STRING("0000000000000000000000", value);
+    free(value);
 
-    char *third = extranonce_2_generate(2, 4);
-    TEST_ASSERT_EQUAL_STRING("02000000", third);
-    free(third);
+    extranonce_2_increment(counter, sizeof(counter));
+    value = extranonce_2_generate(counter, sizeof(counter));
+    TEST_ASSERT_EQUAL_STRING("0100000000000000000000", value);
+    free(value);
 
-    char *fourth = extranonce_2_generate(UINT_MAX - 1, 4);
-    TEST_ASSERT_EQUAL_STRING("feffffff", fourth);
-    free(fourth);
+    memset(counter, 0, sizeof(counter));
+    counter[0] = 0xff;
+    extranonce_2_increment(counter, sizeof(counter));
+    value = extranonce_2_generate(counter, sizeof(counter));
+    TEST_ASSERT_EQUAL_STRING("0001000000000000000000", value);
+    free(value);
 
-    char *fifth = extranonce_2_generate(UINT_MAX / 2, 6);
-    TEST_ASSERT_EQUAL_STRING("ffffff7f0000", fifth);
-    free(fifth);
+    memset(counter, 0xff, sizeof(counter));
+    extranonce_2_increment(counter, sizeof(counter));
+    value = extranonce_2_generate(counter, sizeof(counter));
+    TEST_ASSERT_EQUAL_STRING("0000000000000000000000", value);
+    free(value);
 }
 
 TEST_CASE("Test nonce diff checking", "[mining test_nonce]")
@@ -190,12 +196,3 @@ TEST_CASE("Test nonce diff checking 2", "[mining test_nonce]")
     TEST_ASSERT_EQUAL_INT(683, (int)diff);
 }
 
-
-TEST_CASE("Generate 11-byte extranonce2", "[mining]")
-{
-    char *extranonce_2 = extranonce_2_generate(0x01020304, 11);
-    TEST_ASSERT_NOT_NULL(extranonce_2);
-    TEST_ASSERT_EQUAL_UINT32(22, strlen(extranonce_2));
-    TEST_ASSERT_EQUAL_STRING("0403020100000000000000", extranonce_2);
-    free(extranonce_2);
-}
