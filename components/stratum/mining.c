@@ -111,37 +111,78 @@ bm_job construct_bm_job(mining_notify *params, const char *merkle_root, const ui
     return new_job;
 }
 
+static uint8_t *extranonce_2_random_suffix = NULL;
+static uint32_t extranonce_2_random_suffix_len = 0;
+static uint64_t extranonce_2_counter = 0;
+
+bool extranonce_2_reset(uint32_t length)
+{
+    uint32_t random_length = length > 8 ? length - 8 : (length > 4 ? 4 : length);
+
+    free(extranonce_2_random_suffix);
+    extranonce_2_random_suffix = NULL;
+    extranonce_2_random_suffix_len = 0;
+    extranonce_2_counter = 0;
+
+    if (random_length > 0)
+    {
+        extranonce_2_random_suffix = malloc(random_length);
+        if (extranonce_2_random_suffix == NULL)
+        {
+            return false;
+        }
+
+        esp_fill_random(extranonce_2_random_suffix, random_length);
+        extranonce_2_random_suffix_len = random_length;
+    }
+
+    return true;
+}
+
 char *extranonce_2_generate(uint32_t length)
 {
+    uint32_t random_length = length > 8 ? length - 8 : (length > 4 ? 4 : length);
+    uint32_t counter_length = length - random_length;
+
+    if (random_length != extranonce_2_random_suffix_len ||
+        (random_length > 0 && extranonce_2_random_suffix == NULL))
+    {
+        if (!extranonce_2_reset(length))
+        {
+            return NULL;
+        }
+    }
+
     char *extranonce_2_str = malloc((size_t)length * 2 + 1);
     if (extranonce_2_str == NULL)
     {
         return NULL;
     }
 
-    // For lengths above 8, randomize all but the rightmost 8 bytes;
-    // otherwise randomize up to 4 bytes. Random bytes are placed at the end.
-    uint32_t random_length = length > 8 ? length - 8 : (length > 4 ? 4 : length);
     memset(extranonce_2_str, '0', (size_t)length * 2);
     extranonce_2_str[(size_t)length * 2] = '\0';
 
-    if (random_length > 0)
+    // Counter bytes are little-endian in the displayed hex string:
+    // 0000..., 0100..., 0200...; the random suffix stays fixed for this job.
+    if (counter_length > 0)
     {
-        uint8_t *random_bytes = malloc(random_length);
-        if (random_bytes == NULL)
+        uint8_t counter_bytes[8] = {0};
+        uint32_t bytes_to_write = counter_length < sizeof(counter_bytes) ? counter_length : sizeof(counter_bytes);
+        for (uint32_t i = 0; i < bytes_to_write; i++)
         {
-            free(extranonce_2_str);
-            return NULL;
+            counter_bytes[i] = (uint8_t)(extranonce_2_counter >> (i * 8));
         }
-
-        esp_fill_random(random_bytes, random_length);
-        // Place random bytes at the rightmost end; keep the leading bytes zero.
-        size_t random_offset = (size_t)(length - random_length) * 2;
-        bin2hex(random_bytes, random_length, extranonce_2_str + random_offset,
-                (size_t)random_length * 2 + 1);
-        free(random_bytes);
+        bin2hex(counter_bytes, counter_length, extranonce_2_str, (size_t)counter_length * 2 + 1);
     }
 
+    if (random_length > 0)
+    {
+        size_t random_offset = (size_t)counter_length * 2;
+        bin2hex(extranonce_2_random_suffix, random_length, extranonce_2_str + random_offset,
+                (size_t)random_length * 2 + 1);
+    }
+
+    extranonce_2_counter++;
     return extranonce_2_str;
 }
 
