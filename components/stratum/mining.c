@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <limits.h>
+#include "esp_random.h"
 #include "mining.h"
 #include "utils.h"
 #include "mbedtls/sha256.h"
@@ -110,16 +111,34 @@ bm_job construct_bm_job(mining_notify *params, const char *merkle_root, const ui
     return new_job;
 }
 
-char *extranonce_2_generate(uint32_t extranonce_2, uint32_t length)
+char *extranonce_2_generate(uint32_t length)
 {
-    char *extranonce_2_str = malloc(length * 2 + 1);
-    memset(extranonce_2_str, '0', length * 2);
-    extranonce_2_str[length * 2] = '\0';
-    bin2hex((uint8_t *)&extranonce_2, sizeof(extranonce_2), extranonce_2_str, length * 2 + 1);
-    if (length > 4)
+    char *extranonce_2_str = malloc((size_t)length * 2 + 1);
+    if (extranonce_2_str == NULL)
     {
-        extranonce_2_str[8] = '0';
+        return NULL;
     }
+
+    // Keep the rightmost 8 bytes zero for lengths above 8; otherwise
+    // randomize up to 4 leading bytes and leave the remainder zero.
+    uint32_t random_length = length > 8 ? length - 8 : (length > 4 ? 4 : length);
+    memset(extranonce_2_str, '0', (size_t)length * 2);
+    extranonce_2_str[(size_t)length * 2] = '\0';
+
+    if (random_length > 0)
+    {
+        uint8_t *random_bytes = malloc(random_length);
+        if (random_bytes == NULL)
+        {
+            free(extranonce_2_str);
+            return NULL;
+        }
+
+        esp_fill_random(random_bytes, random_length);
+        bin2hex(random_bytes, random_length, extranonce_2_str, (size_t)length * 2 + 1);
+        free(random_bytes);
+    }
+
     return extranonce_2_str;
 }
 
