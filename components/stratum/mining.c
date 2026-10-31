@@ -112,14 +112,25 @@ bm_job construct_bm_job(mining_notify *params, const char *merkle_root, const ui
 
 char *extranonce_2_generate(uint32_t extranonce_2, uint32_t length)
 {
-    char *extranonce_2_str = malloc(length * 2 + 1);
-    memset(extranonce_2_str, '0', length * 2);
-    extranonce_2_str[length * 2] = '\0';
-    bin2hex((uint8_t *)&extranonce_2, sizeof(extranonce_2), extranonce_2_str, length * 2 + 1);
-    if (length > 4)
+    if (length == 0 || length > 32)
     {
-        extranonce_2_str[8] = '0';
+        return NULL;
     }
+
+    uint8_t *extranonce_2_bytes = calloc(length, sizeof(uint8_t));
+    char *extranonce_2_str = malloc((size_t)length * 2 + 1);
+    if (extranonce_2_bytes == NULL || extranonce_2_str == NULL)
+    {
+        free(extranonce_2_bytes);
+        free(extranonce_2_str);
+        return NULL;
+    }
+
+    size_t bytes_to_copy = length < sizeof(extranonce_2) ? length : sizeof(extranonce_2);
+    memcpy(extranonce_2_bytes, &extranonce_2, bytes_to_copy);
+    bin2hex(extranonce_2_bytes, length, extranonce_2_str, (size_t)length * 2 + 1);
+
+    free(extranonce_2_bytes);
     return extranonce_2_str;
 }
 
