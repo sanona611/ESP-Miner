@@ -135,6 +135,12 @@ char *extranonce_2_generate(uint32_t extranonce_2, uint32_t length)
 
     size_t counter_bytes = length < sizeof(extranonce_2) ? length : sizeof(extranonce_2);
     bin2hex((uint8_t *)&extranonce_2, counter_bytes, extranonce_2_str, length * 2 + 1);
+
+    // bin2hex() writes a NUL after the converted bytes. Restore zero-padding
+    // so the returned string always contains the full negotiated extranonce2.
+    memset(extranonce_2_str + counter_bytes * 2, '0', (length - counter_bytes) * 2);
+    extranonce_2_str[length * 2] = '\0';
+
     return extranonce_2_str;
 }
 
