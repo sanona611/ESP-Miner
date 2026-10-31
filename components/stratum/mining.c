@@ -135,11 +135,10 @@ char *extranonce_2_generate(uint32_t length)
         }
 
         esp_fill_random(random_bytes, random_length);
-        bin2hex(random_bytes, random_length, extranonce_2_str, (size_t)length * 2 + 1);
-        // bin2hex terminates after the converted bytes; restore the zero suffix.
-        memset(extranonce_2_str + (size_t)random_length * 2, '0',
-               (size_t)(length - random_length) * 2);
-        extranonce_2_str[(size_t)length * 2] = '\0';
+        // Place random bytes at the rightmost end; keep the leading bytes zero.
+        size_t random_offset = (size_t)(length - random_length) * 2;
+        bin2hex(random_bytes, random_length, extranonce_2_str + random_offset,
+                (size_t)random_length * 2 + 1);
         free(random_bytes);
     }
 
