@@ -30,6 +30,14 @@ void create_jobs_task(void *pvParameters)
 
         ESP_LOGI(TAG, "New Work Dequeued %s", mining_notification->job_id);
 
+        // Start a new extranonce2 sequence for each incoming Stratum job.
+        if (!extranonce_2_reset(GLOBAL_STATE->extranonce_2_len))
+        {
+            ESP_LOGE(TAG, "Failed to initialize extranonce_2 sequence");
+            STRATUM_V1_free_mining_notify(mining_notification);
+            continue;
+        }
+
         if (GLOBAL_STATE->new_stratum_version_rolling_msg) {
             ESP_LOGI(TAG, "Set chip version rolls %i", (int)(GLOBAL_STATE->version_mask >> 13));
             (GLOBAL_STATE->ASIC_functions.set_version_mask)(GLOBAL_STATE->version_mask);
