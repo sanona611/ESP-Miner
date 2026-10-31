@@ -13,7 +13,7 @@ static const char *TAG = "create_jobs_task";
 #define QUEUE_LOW_WATER_MARK 10 // Adjust based on your requirements
 
 static bool should_generate_more_work(GlobalState *GLOBAL_STATE);
-static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification, uint32_t extranonce_2);
+static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification);
 
 void create_jobs_task(void *pvParameters)
 {
@@ -36,15 +36,11 @@ void create_jobs_task(void *pvParameters)
             GLOBAL_STATE->new_stratum_version_rolling_msg = false;
         }
 
-        uint32_t extranonce_2 = 0;
         while (GLOBAL_STATE->stratum_queue.count < 1 && GLOBAL_STATE->abandon_work == 0)
         {
             if (should_generate_more_work(GLOBAL_STATE))
             {
-                generate_work(GLOBAL_STATE, mining_notification, extranonce_2);
-
-                // Increase extranonce_2 for the next job.
-                extranonce_2++;
+                generate_work(GLOBAL_STATE, mining_notification);
             }
             else
             {
@@ -69,9 +65,9 @@ static bool should_generate_more_work(GlobalState *GLOBAL_STATE)
     return GLOBAL_STATE->ASIC_jobs_queue.count < QUEUE_LOW_WATER_MARK;
 }
 
-static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification, uint32_t extranonce_2)
+static void generate_work(GlobalState *GLOBAL_STATE, mining_notify *notification)
 {
-    char *extranonce_2_str = extranonce_2_generate(extranonce_2, GLOBAL_STATE->extranonce_2_len);
+    char *extranonce_2_str = extranonce_2_generate(GLOBAL_STATE->extranonce_2_len);
     if (extranonce_2_str == NULL) {
         ESP_LOGE(TAG, "Failed to generate extranonce_2");
         return;
