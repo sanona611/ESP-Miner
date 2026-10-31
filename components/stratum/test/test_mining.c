@@ -117,17 +117,17 @@ TEST_CASE("Validate version mask incrementing", "[mining]")
 
 TEST_CASE("Test extranonce 2 generation", "[mining extranonce2]")
 {
-    char *first = extranonce_2_generate(0, 4);
-    TEST_ASSERT_EQUAL_STRING("00000000", first);
+    char *first = extranonce_2_generate(0, 1);
+    TEST_ASSERT_EQUAL_STRING("00", first);
     free(first);
 
-    char *second = extranonce_2_generate(1, 4);
-    TEST_ASSERT_EQUAL_STRING("01000000", second);
+    char *second = extranonce_2_generate(1, 1);
+    TEST_ASSERT_EQUAL_STRING("01", second);
     free(second);
 
-    char *third = extranonce_2_generate(2, 4);
-    TEST_ASSERT_EQUAL_STRING("02000000", third);
-    free(third);
+    char *last = extranonce_2_generate(UINT_MAX, 1);
+    TEST_ASSERT_EQUAL_STRING("ff", last);
+    free(last);
 
     char *fourth = extranonce_2_generate(UINT_MAX - 1, 4);
     TEST_ASSERT_EQUAL_STRING("feffffff", fourth);
