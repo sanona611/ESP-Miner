@@ -129,7 +129,7 @@ char *extranonce_2_generate(uint32_t extranonce_2, uint32_t length)
 
         // Layout: 3 random bytes + 6 zero bytes + 2-byte counter (00xx).
         bin2hex(random_prefix, sizeof(random_prefix), extranonce_2_str, length * 2 + 1);
-        snprintf(extranonce_2_str + 18, 5, "%04x", extranonce_2 & 0xff);
+        snprintf(extranonce_2_str + 18, 5, "%04x", (unsigned int)(extranonce_2 & 0xff));
         return extranonce_2_str;
     }
 
