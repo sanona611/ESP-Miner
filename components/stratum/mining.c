@@ -119,8 +119,8 @@ char *extranonce_2_generate(uint32_t length)
         return NULL;
     }
 
-    // Keep the rightmost 8 bytes zero for lengths above 8; otherwise
-    // randomize up to 4 leading bytes and leave the remainder zero.
+    // For lengths above 8, randomize all but the rightmost 8 bytes;
+    // otherwise randomize up to 4 bytes. Random bytes are placed at the end.
     uint32_t random_length = length > 8 ? length - 8 : (length > 4 ? 4 : length);
     memset(extranonce_2_str, '0', (size_t)length * 2);
     extranonce_2_str[(size_t)length * 2] = '\0';
