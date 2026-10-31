@@ -117,7 +117,8 @@ static uint64_t extranonce_2_counter = 0;
 
 bool extranonce_2_reset(uint32_t length)
 {
-    uint32_t random_length = length > 8 ? length - 8 : (length > 4 ? 4 : length);
+    // Keep four random bytes fixed for the current job; the remaining bytes are the counter.
+    uint32_t random_length = length > 4 ? 4 : length;
 
     free(extranonce_2_random_suffix);
     extranonce_2_random_suffix = NULL;
@@ -141,7 +142,8 @@ bool extranonce_2_reset(uint32_t length)
 
 char *extranonce_2_generate(uint32_t length)
 {
-    uint32_t random_length = length > 8 ? length - 8 : (length > 4 ? 4 : length);
+    // For 11-byte extranonce2: 7 counter bytes + 4 random bytes.
+    uint32_t random_length = length > 4 ? 4 : length;
     uint32_t counter_length = length - random_length;
 
     if (random_length != extranonce_2_random_suffix_len ||
